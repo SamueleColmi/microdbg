@@ -21,22 +21,47 @@ Debugger::Debugger(const string &program_name, pid_t child_pid)
 
 void Debugger::run()
 {
-	int status;
+	TARGET_STATUS state;
 
 	while (true) {
-		if (waitpid(child, &status, 0) == -1) {
-			cerr << "Error! microgdb failed to retrieve target \
-				status: -" << errno << " (" << strerror(errno)
-				<< ")" << endl;
-			exit(EXIT_FAILURE);
-		} else if (WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP) {
+		state = get_target_status();
+
+		switch (state) {
+		case TARGET_STATUS::STOPPED:
 			get_cmd();
-		} else if (WIFEXITED(status)) {
-			cout << "Target program exited with status " <<
-				WEXITSTATUS(status) << ".\nTerminating microgdb."
-				<< endl;
-			exit(EXIT_SUCCESS);
+			break;
+		case TARGET_STATUS::EXITED:
+		case TARGET_STATUS::UNDEF:
+		case TARGET_STATUS::ERROR:
+		default:
+			goto terminate;
 		}
+	}
+
+terminate:
+	cout << "Terminating microdbg, bye!" << endl;
+	exit(EXIT_SUCCESS);
+}
+
+TARGET_STATUS Debugger::get_target_status()
+{
+	int status;
+
+	if (waitpid(child, &status, 0) == -1) {
+		cerr << "Error! microdbg failed to retrieve target status: -" << errno << " (" << strerror(errno) << ")" << endl;
+		return TARGET_STATUS::ERROR;
+	}
+
+	if (WIFSTOPPED(status) && WSTOPSIG(status) == SIGTRAP) {
+		return TARGET_STATUS::STOPPED;
+	}
+
+	if (WIFEXITED(status)) {
+		cout << "Target program exited with status " << WEXITSTATUS(status) << endl;
+		return TARGET_STATUS::EXITED;
+	} else {
+		cerr << "Error! Target program is in undefined state" << endl;
+		return TARGET_STATUS::UNDEF;
 	}
 }
 
@@ -44,7 +69,7 @@ void Debugger::get_cmd()
 {
 	char *line;
 
-	line = linenoise("microgdb> ");
+	line = linenoise("microdbg> ");
 	if (line != nullptr) {
 		handle_cmd(line);
 		linenoiseHistoryAdd(line);
@@ -57,29 +82,18 @@ void Debugger::handle_cmd(const string &line)
 	vector<string> args;
 	string cmd;
 
-	args = split(line);
+	args = parse_cmd(line);
 	cmd = args[0];
 
-	if (is_prefix(cmd, "continue"))
+	if (is_prefix(cmd, "continue")) {
 		continue_execution();
-	else
-		cerr << "Error! Unknown command " << cmd << endl;
+	} else {
+		cerr << "Error! Unknown command \"" << cmd << "\"" << endl;
+		get_cmd();
+	}
 }
 
-void Debugger::continue_execution()
-{
-	ptrace(PTRACE_CONT, child, nullptr, nullptr);
-}
-
-bool Debugger::is_prefix(const string &cmd, const string &of)
-{
-	if (cmd.size() > of.size())
-		return false;
-
-	return equal(cmd.begin(), cmd.end(), of.begin());
-}
-
-vector<string> Debugger::split(const string &str)
+vector<string> Debugger::parse_cmd(const string &str)
 {
 	stringstream ss {str};
 	vector<string> out;
@@ -92,3 +106,15 @@ vector<string> Debugger::split(const string &str)
 	return out;
 }
 
+bool Debugger::is_prefix(const string &cmd, const string &of)
+{
+	if (cmd.size() > of.size())
+		return false;
+
+	return equal(cmd.begin(), cmd.end(), of.begin());
+}
+
+void Debugger::continue_execution()
+{
+	ptrace(PTRACE_CONT, child, nullptr, nullptr);
+}

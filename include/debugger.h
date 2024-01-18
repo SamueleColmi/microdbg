@@ -8,6 +8,14 @@
 
 using namespace std;
 
+enum class TARGET_STATUS
+{
+	STOPPED,
+	EXITED,
+	UNDEF,
+	ERROR
+};
+
 class Debugger
 {
 public:
@@ -20,11 +28,11 @@ private:
 	pid_t child;
 
 	bool is_prefix(const string &str, const string &of);
-	vector<string> split(const string &str);
-	void handle_cmd(const string &cmd);
+	vector<string> parse_cmd(const string &str);
+	void handle_cmd(const string &line);
+	TARGET_STATUS get_target_status();
 	void continue_execution();
 	void get_cmd();
-
 };
 
 
