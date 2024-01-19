@@ -1,3 +1,5 @@
+#include <sys/ptrace.h>
+
 #include "breakpoint.h"
 
 using namespace std;
@@ -25,10 +27,26 @@ intptr_t Breakpoint::get_address()
 #include <iostream>
 void Breakpoint::enable()
 {
-	cout << "Enable" << endl;
+	uint64_t peek_data;
+	uint64_t poke_data;
+	uint64_t int3 = 0xcc;
+
+	peek_data = ptrace(PTRACE_PEEKDATA, pid, addr, nullptr);
+	saved_instruction = static_cast<uint8_t>(peek_data & 0xff);
+	poke_data = ((peek_data & ~0xff) | int3);
+	ptrace(PTRACE_POKEDATA, pid, addr, poke_data);
+
+	enabled = true;
 }
 
 void Breakpoint::disable()
 {
-	cout << "Disable" << endl;
+	uint64_t peek_data;
+	uint64_t poke_data;
+
+	peek_data = ptrace(PTRACE_PEEKDATA, pid, addr, nullptr);
+	poke_data = ((peek_data & ~0xff) | saved_instruction);
+	ptrace(PTRACE_POKEDATA, pid, addr, poke_data);
+
+	enabled = false;
 }
