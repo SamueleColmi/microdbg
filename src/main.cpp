@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 
+#include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -58,6 +59,7 @@ int main(int argc, char *argv[])
 	pid = fork();
 	if (pid == 0) {
 		/* child */
+		personality(ADDR_NO_RANDOMIZE);
 		execute_target(argv[1]);
 	} else if (pid > 0) {
 		/* parent */
