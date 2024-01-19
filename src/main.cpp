@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 
+#include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -20,10 +21,8 @@ static void execute_target(const string &program_name)
 	 * control before the new program begins execution.
 	 */
 	if (ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) == -1) {
-		cerr << "Error! Initialization of ptrace failed: -" << errno <<
-			" (" <<	strerror(errno) << ")" << endl;
-
-		goto exit;
+		cerr << "Error! Initialization of ptrace failed: -" << errno << " (" <<	strerror(errno) << ")" << endl;
+		goto exit_failure;
 	}
 
 	/**
@@ -32,16 +31,20 @@ static void execute_target(const string &program_name)
 	 * parent.
 	 */
 	if (execl(program_name.c_str(), program_name.c_str(), nullptr) == -1) {
-		cerr << "Error! Execution of " << program_name << " failed: -" \
-			<< errno << " (" << strerror(errno) << ")" << endl;
-
-		goto exit;
+		cerr << "Error! Execution of " << program_name << " failed: -" << errno << " (" << strerror(errno) << ")" << endl;
+		goto exit_failure;
 	}
 
 	return;
 
-exit:
+exit_failure:
 	exit(EXIT_FAILURE);
+}
+
+static void execute_debugger(const string &program_name, pid_t pid)
+{
+	Debugger dbg {program_name, pid};
+	dbg.run();
 }
 
 int main(int argc, char *argv[])
@@ -49,26 +52,26 @@ int main(int argc, char *argv[])
 	pid_t pid;
 
 	if (argc != 2) {
-		cerr << "Error! Wrong number of arguments\n \
-			Usage: ./microdbg <program-name-full-path>" << endl;
-		exit(EXIT_FAILURE);
+		cerr << "Error! Wrong number of arguments\nUsage: ./microdbg <program-name-full-path>" << endl;
+		goto exit_failure;
 	}
 
 	pid = fork();
 	if (pid == 0) {
 		/* child */
+		personality(ADDR_NO_RANDOMIZE);
 		execute_target(argv[1]);
-		exit(EXIT_FAILURE);
 	} else if (pid > 0) {
 		/* parent */
-		Debugger dbg = Debugger(argv[1], pid);
-		dbg.run();
+		execute_debugger(argv[1], pid);
 	} else {
 		/* fork() failed */
-		cerr << "Error! Fork of child process failed: -" << errno <<
-			" (" << strerror(errno) << ")" << endl;
-		exit(EXIT_FAILURE);
+		cerr << "Error! Fork of child process failed: -" << errno << " (" << strerror(errno) << ")" << endl;
+		goto exit_failure;
 	}
 
 	return 0;
+
+exit_failure:
+	exit(EXIT_FAILURE);
 }
