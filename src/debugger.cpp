@@ -80,15 +80,22 @@ void Debugger::get_cmd()
 void Debugger::handle_cmd(const string &line)
 {
 	vector<string> args;
-	string cmd;
 
+	/**
+	 * args[0] == command
+	 * args[1] == <address>
+	 *
+	 * TODO:  add check for valid address format, assuming 0xDEADBEEF or DEADBEEF
+	 */
 	args = parse_cmd(line);
-	cmd = args[0];
 
-	if (is_prefix(cmd, "continue")) {
+	if (is_prefix(args[0], "continue")) {
 		continue_execution();
+	} else if (is_prefix(args[0], "breakpoint")) {
+		set_breakpoint_at(stol(args[1], 0, 16));
+		get_cmd();	// TO REMOVE
 	} else {
-		cerr << "Error! Unknown command \"" << cmd << "\"" << endl;
+		cerr << "Error! Unknown command \"" << args[0] << "\"" << endl;
 		get_cmd();
 	}
 }
@@ -102,6 +109,9 @@ vector<string> Debugger::parse_cmd(const string &str)
 	while (getline(ss, token, ' ')) {
 		out.push_back(token);
 	}
+
+	if (out.size() != 2)
+		out.push_back("0x0");
 
 	return out;
 }
@@ -117,4 +127,12 @@ bool Debugger::is_prefix(const string &cmd, const string &of)
 void Debugger::continue_execution()
 {
 	ptrace(PTRACE_CONT, child, nullptr, nullptr);
+}
+
+void Debugger::set_breakpoint_at(intptr_t addr)
+{
+	cout << "Setting breakpoint at: 0x" << hex << addr << endl;
+
+	breakpoints.emplace(piecewise_construct, forward_as_tuple(addr), forward_as_tuple(child, addr));
+	breakpoints[addr].enable();
 }
